@@ -1,3 +1,4 @@
+
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -99,7 +100,7 @@ public:
         x = a.acceleration.x;
         // Subtract 9.75 to account for gravity because the accelerometer reads 9.75 m/s^2 when stationary
         // WARNING: This value may vary depending on the orientation of the sensor
-        x -= 9.75;
+        // x -= 9.75;
         y = a.acceleration.y;
         z = a.acceleration.z;
     }
@@ -159,11 +160,14 @@ private:
 
 class Snake {
 public:
-    Snake() : length(5), prevLength(5), direction(0), fruitX(0), fruitY(0) {}
+    Snake() : score(0), length(5), prevLength(5), direction(0), fruitX(0), fruitY(0) {}
     void setDisplay(Adafruit_ILI9341 &display) { tft = &display; }
     int getDirection() { return direction; }
-    void reset() {
+    int getLength() { return length; }
+    int getScore() { return score; }
+    void reset(int _score = 0) {
         length = 5;
+        score = _score;
         direction = 0;
         for (int i = 0; i < length; ++i) {
             bodyX[i] = 10 - i;
@@ -223,7 +227,7 @@ public:
             tft->setTextColor(ILI9341_WHITE, ILI9341_BLACK); // Set background color to black to overwrite previous text
             tft->setTextSize(3);
             tft->print("Score: ");
-            tft->println(length - 5);
+            tft->println(score);
 
             // Draw lives
             tft->setCursor(tft->width() - 80, tft->height() - 30);
@@ -243,6 +247,7 @@ public:
     bool checkFruitCollision() {
         if (bodyX[0] == fruitX && bodyY[0] == fruitY) {
             length++;
+            score++;
             placeFruit();
             return true;
         }
@@ -251,7 +256,7 @@ public:
 private:
     int bodyX[100], bodyY[100];
     int lastX, lastY;
-    int length, prevLength, direction;
+    int score, length, prevLength, direction;
     int fruitX, fruitY;
     Adafruit_ILI9341 *tft;
 };
@@ -306,7 +311,7 @@ void loop() {
         tft.setTextColor(ILI9341_WHITE);
         tft.setTextSize(3);
         tft.print("Score: ");
-        tft.print(0);
+        tft.print(snake.getScore());
 
         // Draw lives
         tft.setCursor(tft.width() - 80, tft.height() - 30);
@@ -322,8 +327,8 @@ void loop() {
             float threshold = 2;
             if (x > threshold) direction = 0; // Right
             else if (x < -threshold) direction = 2; // Left
-            else if (y > threshold) direction = 1; // Down
-            else if (y < -threshold) direction = 3; // Up
+            else if (y > threshold) direction = 3; // Up
+            else if (y < -threshold) direction = 1; // Down
             else {
                 // Read joystick input
                 int joystickX = joystick.readX();
@@ -340,14 +345,14 @@ void loop() {
                 lives--;
                 if (lives > 0) {
                     lcd.clearScreen();
-                    snake.reset();
+                    snake.reset(snake.getScore());
 
                     // Draw score
                     tft.setCursor(0, tft.height() - 30);
                     tft.setTextColor(ILI9341_WHITE);
                     tft.setTextSize(3);
                     tft.print("Score: ");
-                    tft.println(0);
+                    tft.println(snake.getScore());
                     
                     // Draw lives
                     tft.setCursor(tft.width() - 80, tft.height() - 30);
@@ -378,13 +383,13 @@ void loop() {
 
             switch (difficulty) {
                 case EASY:
-                    delay(250);
+                    delay(400);
                     break;
                 case MEDIUM:
-                    delay(200);
+                    delay(300);
                     break;
                 case HARD:
-                    delay(150);
+                    delay(200);
                     break;
             }
         }
