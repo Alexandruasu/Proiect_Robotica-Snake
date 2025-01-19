@@ -1,4 +1,3 @@
-
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
@@ -82,10 +81,10 @@ private:
     int _pinX, _pinY, _buttonPin;
 };
 
-class Gyro {
+class IMU {
 public:
-    Gyro() {}
-    bool initGyro() {
+    IMU() {}
+    bool initIMU() {
         if (!mpu.begin()) {
             return false;
         }
@@ -98,9 +97,6 @@ public:
         sensors_event_t a, g, temp;
         mpu.getEvent(&a, &g, &temp);
         x = a.acceleration.x;
-        // Subtract 9.75 to account for gravity because the accelerometer reads 9.75 m/s^2 when stationary
-        // WARNING: This value may vary depending on the orientation of the sensor
-        // x -= 9.75;
         y = a.acceleration.y;
         z = a.acceleration.z;
     }
@@ -118,19 +114,31 @@ public:
     Menu() : currentOption(0), selectedOption(-1) {}
     void setDisplay(Adafruit_ILI9341 &display) { tft = &display; }
     void displayMenu() {
-        // tft->fillScreen(ILI9341_BLACK);
+        // Draw menu border
+        tft->drawRect(10, 10, tft->width() - 20, tft->height() - 20, ILI9341_WHITE);
+
+        // Draw menu title
+        const char* title = "Snake Game";
+        int16_t x1, y1;
+        uint16_t w, h;
+        tft->setTextSize(3);
+        tft->getTextBounds(title, 0, 0, &x1, &y1, &w, &h);
+        tft->setCursor((tft->width() - w) / 2, 20); // Center the title
+        tft->setTextColor(ILI9341_YELLOW);
+        tft->println(title);
+
+        // Draw menu options
+        const char* options[] = {"1. Play", "2. Difficulty", "3. Debug", "4. Exit"};
         for (int i = 0; i < 4; i++) {
-            tft->setCursor(0, i * 20);
+            tft->setTextSize(2);
+            tft->getTextBounds(options[i], 0, 0, &x1, &y1, &w, &h);
+            tft->setCursor((tft->width() - w) / 2, 60 + i * 40); // Center the options
             if (i == currentOption) {
                 tft->setTextColor(ILI9341_RED, ILI9341_BLACK);
             } else {
                 tft->setTextColor(ILI9341_WHITE, ILI9341_BLACK);
             }
-            tft->setTextSize(2);
-            if (i == 0) tft->println("1. Play");
-            if (i == 1) tft->println("2. Difficulty");
-            if (i == 2) tft->println("3. Debug");
-            if (i == 3) tft->println("4. Exit");
+            tft->println(options[i]);
         }
     }
     void navigate(int direction) {
@@ -145,12 +153,30 @@ public:
     int getCurrentOption() { return currentOption; }
     int getSelectedOption() { return selectedOption; }
     void setSelectedOption(int option) { selectedOption = option; }
-    void displayGameOver() {
+    void displayGameOver(int score) {
         tft->fillScreen(ILI9341_BLACK);
-        tft->setCursor(0, 0);
+
+        // Draw "Game Over" text
+        const char* gameOverText = "Game Over";
+        int16_t x1, y1;
+        uint16_t w, h;
+        tft->setTextSize(3);
+        tft->getTextBounds(gameOverText, 0, 0, &x1, &y1, &w, &h);
+        tft->setCursor((tft->width() - w) / 2, tft->height() / 2 - 30); // Center the text
         tft->setTextColor(ILI9341_RED);
+        tft->println(gameOverText);
+
+        // Draw score text
+        char scoreText[20];
+        sprintf(scoreText, "Score: %d", score);
         tft->setTextSize(2);
-        tft->println("Game Over");
+        tft->getTextBounds(scoreText, 0, 0, &x1, &y1, &w, &h);
+        tft->setCursor((tft->width() - w) / 2, tft->height() / 2 + 10); // Center the text
+        tft->setTextColor(ILI9341_WHITE);
+        tft->println(scoreText);
+
+        // Draw border
+        tft->drawRect(10, 10, tft->width() - 20, tft->height() - 20, ILI9341_WHITE);
     }
 private:
     Adafruit_ILI9341 *tft;
@@ -190,6 +216,13 @@ public:
         int prev2X, prev2Y;
         bodyX[0] += (direction == 0) - (direction == 2); // Right or Left
         bodyY[0] += (direction == 1) - (direction == 3); // Down or Up
+
+        // Wrap around the screen
+        if (bodyX[0] < 0) bodyX[0] = tft->width() / 10 - 1;
+        if (bodyX[0] >= tft->width() / 10) bodyX[0] = 0;
+        if (bodyY[0] < 0) bodyY[0] = tft->height() / 10 - 1;
+        if (bodyY[0] >= tft->height() / 10) bodyY[0] = 0;
+
         for (int i = 1; i < length; ++i) {
             prev2X = bodyX[i];
             prev2Y = bodyY[i];
@@ -200,9 +233,6 @@ public:
         }
     }
     bool checkCollision() {
-        if (bodyX[0] < 0 || bodyX[0] >= tft->width() / 10 || bodyY[0] < 0 || bodyY[0] >= tft->height() / 10) {
-            return true;
-        }
         for (int i = 1; i < length; ++i) {
             if (bodyX[0] == bodyX[i] && bodyY[0] == bodyY[i]) {
                 return true;
@@ -211,7 +241,6 @@ public:
         return false;
     }
     void update() {
-        // tft->fillRect(0, 0, tft->width(), tft->height(), ILI9341_BLACK); // Clear screen
         tft->fillRect(lastX * 10, lastY * 10, 10, 10, ILI9341_BLACK);
         for (int i = 0; i < length; ++i) {
             tft->fillRect(bodyX[i] * 10, bodyY[i] * 10, 10, 10, ILI9341_GREEN);
@@ -234,7 +263,6 @@ public:
             for (int i = 0; i < lives; i++) {
                 drawHeart(tft->width() - 80 + i * 25, tft->height() - 30, ILI9341_RED, 3);
             }
-            // tft->print(lives);
 
             // Update prevLength
             prevLength = length;
@@ -263,14 +291,14 @@ private:
 
 LCD lcd(_cs, _dc, _rst);
 Joystick joystick(JOYSTICK_X, JOYSTICK_Y, JOYSTICK_BUTTON);
-Gyro gyro;
+IMU imu;
 Menu menu;
 Snake snake;
 
 void setup() {
     tone(buzzer, 1000, 200);
     lcd.initLCD();
-    gyro.initGyro();
+    imu.initIMU();
     joystick.begin();
     menu.setDisplay(lcd.getTft());
     snake.setDisplay(lcd.getTft());
@@ -320,8 +348,15 @@ void loop() {
         }
 
         while (true) {
+            if (joystick.isButtonPressed()) {
+                menu.setSelectedOption(-1);
+                lcd.clearScreen();
+                menu.displayMenu();
+                break;
+            }
+
             float x, y, z;
-            gyro.readAccel(x, y, z);
+            imu.readAccel(x, y, z);
             int direction = snake.getDirection();
             
             float threshold = 2;
@@ -329,16 +364,6 @@ void loop() {
             else if (x < -threshold) direction = 2; // Left
             else if (y > threshold) direction = 3; // Up
             else if (y < -threshold) direction = 1; // Down
-            else {
-                // Read joystick input
-                int joystickX = joystick.readX();
-                int joystickY = joystick.readY();
-                
-                if (joystickX < 100) direction = 3; // Up
-                else if (joystickX > 900) direction = 1; // Down
-                else if (joystickY < 100) direction = 0; // Right
-                else if (joystickY > 900) direction = 2; // Left
-            }
 
             snake.move(direction);
             if (snake.checkCollision()) {
@@ -362,7 +387,7 @@ void loop() {
                     
                     continue;
                 }
-                menu.displayGameOver();
+                menu.displayGameOver(snake.getScore());
                 tone(buzzer, 500, 200);
                 delay(200);
                 tone(buzzer, 400, 200);
@@ -402,15 +427,17 @@ void loop() {
         int difficultyOption = 0;
 
         while (true) {
-            // tft.fillScreen(ILI9341_BLACK);
             for (int i = 0; i < 3; i++) {
-                tft.setCursor(0, i * 20);
+                int16_t x1, y1;
+                uint16_t w, h;
+                tft.setTextSize(2);
+                tft.getTextBounds(difficulties[i], 0, 0, &x1, &y1, &w, &h);
+                tft.setCursor((tft.width() - w) / 2, 60 + i * 40); // Center the options
                 if (i == difficultyOption) {
                     tft.setTextColor(ILI9341_RED, ILI9341_BLACK);
                 } else {
                     tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK);
                 }
-                tft.setTextSize(2);
                 tft.println(difficulties[i]);
             }
 
@@ -446,12 +473,14 @@ void loop() {
         menu.displayMenu();
     } else if (selectedOption == 2) { // Debug
         // Display accelerometer and gyroscope data on screen until joystick button is pressed
-        tft = lcd.getTft();
+        tft = lcd.getTft();\
+        tft.fillScreen(ILI9341_BLACK);
+
         while (true) {
             float accelX, accelY, accelZ;
             float gyroX, gyroY, gyroZ;
-            gyro.readAccel(accelX, accelY, accelZ);
-            gyro.readGyro(gyroX, gyroY, gyroZ);
+            imu.readAccel(accelX, accelY, accelZ);
+            imu.readGyro(gyroX, gyroY, gyroZ);
             
             tft.setCursor(0, 0);
             tft.setTextColor(ILI9341_WHITE, ILI9341_BLACK); // Set background color to black to overwrite previous text
